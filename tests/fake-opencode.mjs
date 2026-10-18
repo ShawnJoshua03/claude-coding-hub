@@ -1,9 +1,10 @@
 // Fake `opencode` for tests: `debug config` prints a resolved config; `acp` speaks a minimal
 // Agent Client Protocol over stdio. Flags after the script path alter behaviour:
-// --loose (config check reports bash: allow), --plugin (reports a plugin), --wrong-model (session uses openai).
+// --loose (config check reports bash: allow), --plugin (reports a plugin), --wrong-model (session reports openai).
 import { createInterface } from 'node:readline';
 const args = process.argv.slice(2), flag = f => args.includes(f);
 const inline = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT ?? '{}');
+if (!flag('--pure')) process.exit(2);
 if (args.includes('debug') && args.includes('config')) {
  const c = structuredClone(inline);
  if (flag('--loose')) c.permission.bash = 'allow';
@@ -34,7 +35,8 @@ createInterface({ input: process.stdin }).on('line', line => {
  }
  if (m.method === 'session/new') {
   if (!Array.isArray(m.params.mcpServers) || m.params.mcpServers.length) throw Error('MCP servers passed to session');
-  send({ id: m.id, result: { sessionId: session, models: { currentModelId: flag('--wrong-model') ? 'openai/gpt-5' : inline.model, availableModels: [] } } });
+  // The real 1.19.1 CLI omitted models from session/new during a keyless handshake.
+  send({ id: m.id, result: { sessionId: session, ...(flag('--wrong-model') ? { models: { currentModelId: 'openai/gpt-5' } } : {}) } });
  }
  if (m.method === 'session/cancel') { if (promptId !== undefined) end('', 'cancelled'); return; }
  if (m.method === 'session/prompt') {
@@ -44,7 +46,7 @@ createInterface({ input: process.stdin }).on('line', line => {
    if (mode === 'summary') { chunk('SIMULATED '); end('opencode summary'); }
    else if (mode === 'env') {
     const keys = Object.keys(process.env).sort();
-    end(JSON.stringify({ keys, hasGemini: process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'synthetic-gemini-key', configHome: process.env.XDG_CONFIG_HOME, dataHome: process.env.XDG_DATA_HOME, cwd: process.cwd() }));
+    end(JSON.stringify({ keys, hasGemini: process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'synthetic-gemini-key', configHome: process.env.XDG_CONFIG_HOME, dataHome: process.env.XDG_DATA_HOME, userHome: process.env.USERPROFILE, home: process.env.HOME, appData: process.env.APPDATA, localAppData: process.env.LOCALAPPDATA, cwd: process.cwd() }));
    }
    else if (mode === 'always-only') permission(901, allOptions.filter(o => o.kind !== 'allow_once'));
    else if (mode === 'wrong-session') permission(902, allOptions, 'other-session');

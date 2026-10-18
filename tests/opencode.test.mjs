@@ -52,6 +52,12 @@ test('opencode: worker env carries only the allowlist, the Gemini key and isolat
  for (const k of r.keys.filter(k => !k.startsWith('=') && !(process.platform === 'win32' && osAdded.has(k)))) assert.match(k, allowed);
  assert.equal(r.hasGemini, true);
  const rel = relative(r.cwd, r.configHome); assert.ok(rel.startsWith('..') || isAbsolute(rel), 'OpenCode config home must be outside the task folder');
+ assert.equal(r.userHome, r.home);
+ for (const dir of [r.userHome, r.appData, r.localAppData]) {
+  const fromTask = relative(r.cwd, dir); assert.ok(fromTask.startsWith('..') || isAbsolute(fromTask), 'OpenCode home must be outside the task folder');
+ }
+ assert.equal(relative(r.userHome, r.appData), 'Roaming');
+ assert.equal(relative(r.userHome, r.localAppData), 'Local');
 });
 test('opencode: missing Gemini key refuses to start', async t => {
  const call = await hub(t, undefined, { GEMINI_API_KEY: '', GOOGLE_GENERATIVE_AI_API_KEY: '' });
@@ -84,6 +90,11 @@ test('opencode: config check accepts only the hub settings', () => {
  bad({ ...openCodeConfig(model), permission: { ...openCodeConfig(model).permission, webfetch: 'ask' } });
  bad({ ...openCodeConfig(model), mcp: { x: { type: 'local', command: ['x'] } } });
  bad({ ...openCodeConfig(model), agent: { build: { permission: { bash: 'allow' } } } });
+  bad({ ...openCodeConfig(model), agent: { build: { model: 'openai/gpt-5' } } });
+  bad({ ...openCodeConfig(model), provider: { google: { options: { baseURL: 'https://example.invalid' } } } });
+  bad({ ...openCodeConfig(model), command: { unsafe: { template: 'run' } } });
+  bad({ ...openCodeConfig(model), instructions: ['outside-instructions'] });
+  bad({ ...openCodeConfig(model), permission: { ...openCodeConfig(model).permission, task: undefined } });
  bad({ ...openCodeConfig(model), enabled_providers: ['google', 'openai'] });
  bad({ ...openCodeConfig(model), formatter: {} });
  bad(undefined);

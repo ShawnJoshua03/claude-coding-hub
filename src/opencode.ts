@@ -19,7 +19,7 @@ import { BaseTask, terminal, filteredEnvironment, type Pending } from './task.js
 
 export type Envelope = { jsonrpc?: string; id?: string | number; method?: string; params?: any; result?: any; error?: any };
 export const OPENCODE_PERMISSIONS = { edit: 'ask', bash: 'ask', webfetch: 'deny', external_directory: 'deny' } as const;
-// Newer permission keys; checked when OpenCode reports them (older versions drop unknown keys).
+// These keys are present in the verified CLI and must remain denied/asked.
 export const OPENCODE_OPTIONAL_PERMISSIONS = { websearch: 'deny', codesearch: 'deny', task: 'deny', skill: 'deny', doom_loop: 'ask' } as const;
 const PROJECT_CONFIG = ['opencode.json', 'opencode.jsonc', '.opencode'];
 
@@ -40,6 +40,8 @@ export function openCodeEnvironment(home: string, apiKey: string, model: string)
   const { CODEX_HOME: _codex, ...base } = filteredEnvironment();
   return {
     ...base,
+    // OpenCode also searches ~/.opencode independently of the XDG directories.
+    HOME: home, USERPROFILE: home, APPDATA: join(home, 'Roaming'), LOCALAPPDATA: join(home, 'Local'),
     XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), XDG_CACHE_HOME: join(home, 'cache'),
     OPENCODE_CONFIG_CONTENT: JSON.stringify(openCodeConfig(model)),
     OPENCODE_DISABLE_AUTOUPDATE: '1', OPENCODE_DISABLE_DEFAULT_PLUGINS: '1', OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
@@ -69,14 +71,20 @@ export function checkOpenCodeConfig(c: any, model: string) {
   const problems: string[] = [];
   const perm = c?.permission && typeof c.permission === 'object' ? c.permission : {};
   for (const [k, want] of Object.entries(OPENCODE_PERMISSIONS)) if (permissionValue(perm[k]) !== want) problems.push(`permission.${k} must be ${want}`);
-  for (const [k, want] of Object.entries(OPENCODE_OPTIONAL_PERMISSIONS)) if (k in perm && permissionValue(perm[k]) !== want) problems.push(`permission.${k} must be ${want}`);
+  for (const [k, want] of Object.entries(OPENCODE_OPTIONAL_PERMISSIONS)) if (permissionValue(perm[k]) !== want) problems.push(`permission.${k} must be ${want}`);
   if (Object.keys(c?.mcp ?? {}).length) problems.push('MCP servers configured');
   if ((c?.plugin ?? []).length) problems.push('plugins configured');
+  if (Object.keys(c?.provider ?? {}).length) problems.push('provider overrides configured');
+  if (Object.keys(c?.command ?? {}).length) problems.push('custom commands configured');
+  if (Object.keys(c?.tools ?? {}).length) problems.push('legacy tool overrides configured');
+  if ((c?.instructions ?? []).length) problems.push('extra instructions configured');
+  if (Object.keys(c?.agent ?? {}).length || Object.keys(c?.mode ?? {}).length) problems.push('agent or mode overrides configured');
+  if (c?.default_agent !== undefined || c?.skills !== undefined || c?.experimental !== undefined) problems.push('extra agent or tool configuration');
   if (c?.model !== model) problems.push('model not retained');
+  if (c?.small_model !== model) problems.push('small model not retained');
   if (JSON.stringify(c?.enabled_providers) !== '["google"]') problems.push('providers other than google enabled');
   if (c?.lsp !== false || c?.formatter !== false) problems.push('LSP servers or formatters enabled');
   if (c?.share !== 'disabled' || c?.autoupdate !== false) problems.push('sharing or autoupdate enabled');
-  for (const a of [...Object.values(c?.agent ?? {}), ...Object.values(c?.mode ?? {})] as any[]) if (a?.permission || a?.tools) problems.push('agent permission/tool overrides configured');
   if (problems.length) throw new Error(`OpenCode did not retain the required human permissions/isolation: ${[...new Set(problems)].join('; ')}`);
 }
 
@@ -108,7 +116,7 @@ export class OpenCodeWorker extends BaseTask {
   // Runs `opencode debug config` as the owned child, so cancellation kills it like the main worker.
   private resolvedConfig(env: Record<string, string>) {
     return new Promise<any>((resolve, reject) => {
-      const child = this.spawnChild(['debug', 'config'], env); let out = '';
+      const child = this.spawnChild(['debug', 'config', '--pure'], env); let out = '';
       const release = () => { clearTimeout(timer); if (this.child === child) this.child = undefined; };
       const timer = setTimeout(() => reject(new Error('OpenCode config check timed out')), 60000);
       child.stdin.on('error', () => {}); child.stdin.end();
@@ -131,7 +139,7 @@ export class OpenCodeWorker extends BaseTask {
       const env = openCodeEnvironment(this.home, this.apiKey, this.model);
       checkOpenCodeConfig(await this.resolvedConfig(env), this.model);
       if (terminal.has(this.state)) return;
-      const child = this.spawnChild(['acp'], env);
+      const child = this.spawnChild(['acp', '--pure'], env);
       child.on('error', e => { this.stopped = true; this.fail(e); });
       child.stdin.on('error', e => { if (!terminal.has(this.state)) this.fail(e); });
       child.on('exit', () => { if (!terminal.has(this.state)) this.fail(new Error('Worker process exited before turn completion')); });
