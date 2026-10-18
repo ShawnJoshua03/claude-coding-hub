@@ -20,7 +20,7 @@ This repo is a local MCP hub that lets a Claude Code lead delegate work to codin
 ## Rules
 
 - Work on a new branch, never `main`. Do not push, merge or rewrite history.
-- Before reporting done run `npm run build && npm test` and paste the real result, including failures. All tests must pass (26 at the time of writing).
+- Before reporting done run `npm run build && npm test` and paste the real result, including failures. All tests must pass (47 at the time of writing). Run them outside any sandbox that blocks `taskkill` or process-group kill: the hub fails closed when it cannot confirm a worker stopped, and tests then fail or hang.
 - Never add, print or commit API keys, tokens or `.local/`. Provider keys come from the human's environment only.
 - Keep changes small and say which files you touched. Do not add dependencies without asking.
 - If a task seems to require editing an off-limits file, stop and explain instead.
