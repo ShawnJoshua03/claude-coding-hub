@@ -169,7 +169,9 @@ export class OpenCodeWorker extends BaseTask {
     if (method !== 'session/request_permission' || JSON.stringify(params).length > 20000) { this.refuse(id, 'Request unsupported by this restricted pilot', -32601); return; }
     if (!this.sessionId || params.sessionId !== this.sessionId) { this.refuse(id, 'Wrong session'); return; }
     const call = params.toolCall, options = Array.isArray(params.options) ? params.options : [];
-    const reviewable = call && typeof call.toolCallId === 'string' && ((typeof call.title === 'string' && call.title.trim()) || (call.rawInput && typeof call.rawInput === 'object' && Object.keys(call.rawInput).length));
+    // The title is the agent's own description; the human must see the exact tool input, as Codex
+    // approvals require the exact command or patch.
+    const reviewable = call && typeof call.toolCallId === 'string' && call.rawInput && typeof call.rawInput === 'object' && !Array.isArray(call.rawInput) && Object.keys(call.rawInput).length;
     if (!reviewable || !options.some((o: any) => o?.kind === 'allow_once' && typeof o.optionId === 'string')) { this.refuse(id, 'Permission request lacks a reviewable one-shot option'); return; }
     if (this.pending.has(id)) { this.fail(new Error('Duplicate provider request id')); return; }
     this.addPending({ id, kind: 'approval', method, params: { sessionId: params.sessionId, toolCall: call, options } });

@@ -17,7 +17,7 @@ const session = 'fake-session';
 let promptId, mode = '';
 const chunk = text => send({ method: 'session/update', params: { sessionId: session, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
 const end = (text, stopReason = 'end_turn') => { if (text) chunk(text); send({ id: promptId, result: { stopReason } }); };
-const permission = (id, options, sessionId = session) => send({ id, method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'call1', title: 'SIMULATED echo opencode', kind: 'execute', status: 'pending', rawInput: { command: 'SIMULATED echo opencode' } }, options } });
+const permission = (id, options, sessionId = session, rawInput = { command: 'SIMULATED echo opencode' }) => send({ id, method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'call1', title: 'SIMULATED echo opencode', kind: 'execute', status: 'pending', ...(rawInput ? { rawInput } : {}) }, options } });
 const allOptions = [{ optionId: 'always', name: 'Always allow', kind: 'allow_always' }, { optionId: 'once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject', name: 'Reject', kind: 'reject_once' }];
 createInterface({ input: process.stdin }).on('line', line => {
  const m = JSON.parse(line);
@@ -27,7 +27,7 @@ createInterface({ input: process.stdin }).on('line', line => {
   if (id === 'once') end('SIMULATED action accepted once'); else if (id === 'always') end('ALWAYS GRANTED'); else end('', 'cancelled');
   return;
  }
- if (!m.method && [901, 902, 903].includes(m.id)) { end(m.error ? `refused ${m.id}: ${m.error.message}` : `ACCEPTED ${m.id}`); return; }
+ if (!m.method && [901, 902, 903, 904].includes(m.id)) { end(m.error ? `refused ${m.id}: ${m.error.message}` : `ACCEPTED ${m.id}`); return; }
  if (m.method === 'initialize') {
   if (m.params.clientCapabilities?.terminal !== false || m.params.clientCapabilities?.fs?.writeTextFile !== false) throw Error('Client must not offer fs/terminal');
   send({ id: m.id, result: { protocolVersion: 1, agentCapabilities: {}, authMethods: [] } });
@@ -48,7 +48,8 @@ createInterface({ input: process.stdin }).on('line', line => {
    }
    else if (mode === 'always-only') permission(901, allOptions.filter(o => o.kind !== 'allow_once'));
    else if (mode === 'wrong-session') permission(902, allOptions, 'other-session');
-   else if (mode === 'fs') send({ id: 903, method: 'fs/write_text_file', params: { sessionId: session, path: 'outside.txt', content: 'x' } });
+   else if (mode === 'title-only') permission(904, allOptions, session, null);
+   else if (mode === 'fs')send({ id: 903, method: 'fs/write_text_file', params: { sessionId: session, path: 'outside.txt', content: 'x' } });
    else permission(900, allOptions);
   }, 30);
  }

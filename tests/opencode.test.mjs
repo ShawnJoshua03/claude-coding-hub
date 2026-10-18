@@ -72,8 +72,8 @@ test('opencode: project config in the task folder is refused before any process 
   const w = await direct('summary', [], d); assert.equal(w.state, 'failed'); assert.match(w.error, /Project OpenCode config/); assert.equal(w.busy(), false);
  }
 });
-test('opencode: permission without allow_once, wrong session, and fs requests are refused, never presented', async () => {
- for (const [mode, id] of [['always-only', 901], ['wrong-session', 902], ['fs', 903]]) {
+test('opencode: permission without allow_once, wrong session, title without exact input, and fs requests are refused, never presented', async () => {
+ for (const [mode, id] of [['always-only', 901], ['wrong-session', 902], ['fs', 903], ['title-only', 904]]) {
   const w = await direct(mode); assert.equal(w.state, 'completed', w.error); assert.match(w.result, new RegExp(`refused ${id}`)); assert.equal(w.pending.size, 0);
  }
 });
