@@ -1,0 +1,1 @@
+Follow AGENTS.md in the repository root. In particular: do not edit src/task.ts, src/worker.ts, src/workspace.ts or the approval logic in src/server.ts; work on a branch; run `npm run build && npm test` and report the real result.
