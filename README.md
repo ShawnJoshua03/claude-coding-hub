@@ -30,6 +30,15 @@ The hub runs git outside the sandbox on a folder the worker could edit, so host-
 
 Tasks and decisions are stored in `.local\hub.sqlite`. `list_workers` and `get_task_history` survive restarts; a task that was active when the hub stopped is reported `interrupted`, and its worktree can still be diffed, committed or removed.
 
+## OpenCode provider (Gemini API key) — UNVERIFIED against the real CLI
+
+`start_worker` with `provider: "opencode"` runs `src/opencode.ts`, which drives `opencode acp` (Agent Client Protocol over stdio). OpenCode was not installed when this was written, so it is built from OpenCode/ACP documentation and tested only against `tests/fake-opencode.mjs`. Do not rely on it until a human has run it against a real install.
+
+- Key: set `GEMINI_API_KEY` (or `GOOGLE_GENERATIVE_AI_API_KEY`) in the environment that launches the hub. The worker gets it only as `GOOGLE_GENERATIVE_AI_API_KEY`, plus the shared allowlist minus `CODEX_HOME`. Optional: `HUB_OPENCODE_MODEL` (must be `google/...`, default `google/gemini-2.5-pro`), `HUB_OPENCODE_COMMAND` (on Windows point it at the real `opencode.exe`; `.cmd` shims are not launched through a shell).
+- OpenCode has no OS sandbox. Its bash and edit tools are forced to `ask`, so every command and edit becomes a human form; web tools, subagents, skills and paths outside the task folder are denied. Only the provider's `allow_once` option is ever selected. Any approved command runs unsandboxed as you and can see the Gemini key.
+- OpenCode config/data/state/cache dirs point at a fresh temp folder per task (no global config, plugins or stored `auth.json`). Before inference the hub runs `opencode debug config` and stops unless the permissions, `google`-only provider, empty MCP/plugin lists, disabled LSP/formatters and absence of agent overrides were retained. A task folder (up to its git root) containing `opencode.json`, `opencode.jsonc` or `.opencode/` is refused.
+- Assumptions to check on a real install: the `acp` and `debug config` subcommands and output; the `OPENCODE_CONFIG_CONTENT` and `OPENCODE_DISABLE_*` variables; that XDG variables relocate OpenCode's dirs on Windows; the permission keys and their `ask`/`deny` semantics; the shape of `session/request_permission` (title/rawInput/options) and `session/new` `models.currentModelId`. OpenCode may still download its Google SDK package at startup. Worker questions are not supported (ACP has no client question request).
+
 ## What to test from the iPhone
 
 1. Ask Claude: `Call coding_hub test_phone_form. This is only a synthetic rendering check; do not run a worker.` Choose decline, then repeat and choose allow-once, typing phone-test. No command executes in either synthetic test.

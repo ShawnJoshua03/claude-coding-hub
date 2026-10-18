@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CodexWorker, fixtureRoot } from './worker.js';
+import { OpenCodeWorker } from './opencode.js';
 import { BaseTask, done, type Pending } from './task.js';
 import { Workspaces, type Workspace } from './workspace.js';
 import { Store } from './store.js';
@@ -18,6 +19,7 @@ const workspaces = process.env.HUB_REPO_ROOT ? await Workspaces.open(process.env
 const maxWorkers = workspaces ? Math.max(1, Number(process.env.HUB_MAX_WORKERS ?? 3)) : 1;
 const providers: Record<string, (cwd: string) => BaseTask> = {
   codex: cwd => new CodexWorker(cwd, process.env.HUB_CODEX_COMMAND ?? 'codex', process.env.HUB_CODEX_PREFIX_JSON ? JSON.parse(process.env.HUB_CODEX_PREFIX_JSON) : []),
+  opencode: cwd => new OpenCodeWorker(cwd, process.env.HUB_OPENCODE_COMMAND ?? 'opencode', process.env.HUB_OPENCODE_PREFIX_JSON ? JSON.parse(process.env.HUB_OPENCODE_PREFIX_JSON) : []),
 };
 const providerNames = Object.keys(providers) as [string, ...string[]];
 
