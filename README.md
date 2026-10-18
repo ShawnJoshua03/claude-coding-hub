@@ -51,7 +51,7 @@ Record each pass/fail with phone model/app version, date, exact test and observe
 - A completed provider turn is a worker report, not proof that project checks passed. Claude owns integration and verification.
 - Tests use a fake Codex protocol process and real MCP transport. They verify adapter behavior but cannot prove native sandbox enforcement, subscription entitlement or iPhone rendering. scripts/smoke.mjs uses real Codex for read-only inference and declines unexpected approval requests; actual human accept-once must be tested on the phone.
 
-See [phone test results](docs/phone-results.md) and [Claude's lead responsibilities](fixtures/pilot/CLAUDE.md). No Git commit or push has been made.
+See [phone test results](docs/phone-results.md) and [Claude's lead responsibilities](fixtures/pilot/CLAUDE.md).
 
 Regenerate installed schemas when upgrading Codex: codex app-server generate-ts --out protocol --experimental. Generated schemas are local verification inputs and ignored by Git.
 
