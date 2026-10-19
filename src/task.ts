@@ -70,9 +70,11 @@ export abstract class BaseTask extends EventEmitter {
       if (!child?.pid) { this.stopped = true; resolve(); return; }
       if (child.exitCode !== null) { this.error = 'Worker exited unexpectedly; descendant cleanup unconfirmed. Workspace remains locked until this MCP session is closed and owned processes are checked.'; resolve(); return; }
       if (process.platform === 'win32') {
-        const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        // taskkill's own output is kept so an unconfirmed cleanup says why (it does not change the outcome).
+        const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+        let report = ''; const keep = (d: Buffer) => { report = (report + d).slice(-600); }; killer.stdout.on('data', keep); killer.stderr.on('data', keep);
         killer.on('error', () => { this.error = 'Process tree cleanup failed; workspace stays locked'; resolve(); });
-        killer.on('exit', code => { this.stopped = code === 0; if (!this.stopped) this.error = 'Process tree cleanup unconfirmed; workspace stays locked'; this.changed(); resolve(); });
+        killer.on('exit', code => { this.stopped = code === 0; if (!this.stopped) this.error = `Process tree cleanup unconfirmed; workspace stays locked (taskkill exit ${code}: ${report.replace(/\s+/g, ' ').trim()})`; this.changed(); resolve(); });
       } else { child.once('exit', () => { this.stopped = true; this.changed(); resolve(); }); try { process.kill(-child.pid, 'SIGKILL'); } catch { this.error = 'Process group cleanup unconfirmed; workspace stays locked'; resolve(); } }
     });
     this.changed();
