@@ -5,11 +5,17 @@ $taskFixture=Join-Path $taskHubRoot 'fixtures\pilot'
 $taskServer=Join-Path $taskHubRoot 'dist\server.js'
 if(-not(Test-Path -LiteralPath $taskServer)){throw 'Build first with npm.cmd run build.'}
 $taskNode=(Get-Command node -CommandType Application).Source
-$taskCodex=(Get-Command codex -CommandType Application).Source
+# The Codex app and winget do not always put codex/opencode on PATH; fall back to their install folders.
+$taskCodex=(Get-Command codex -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+if(-not $taskCodex){$taskCodex=(Get-ChildItem "$env:LOCALAPPDATA\OpenAI\Codex\bin\*\codex.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName}
+if(-not $taskCodex){throw 'codex not found on PATH or in the Codex app folder.'}
+$taskOpenCode=(Get-Command opencode -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+if(-not $taskOpenCode){$taskOpenCode=(Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\SST.opencode_*\opencode.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName}
 $taskLocal=Join-Path $taskHubRoot '.local'
 New-Item -ItemType Directory -Path $taskLocal -Force | Out-Null
 $taskConfig=Join-Path $taskLocal 'mcp.json'
 $taskEnv=@{HUB_FIXTURE_ROOT=$taskFixture;HUB_CODEX_COMMAND=$taskCodex;HUB_CODEX_PREFIX_JSON='[]';HUB_DB_PATH=(Join-Path $taskLocal 'hub.sqlite')}
+if($taskOpenCode){$taskEnv.HUB_OPENCODE_COMMAND=$taskOpenCode; $taskEnv.HUB_OPENCODE_PREFIX_JSON='[]'}
 # Repo mode: each worker gets its own worktree under .local\worktrees and a hub/* branch; the lead runs in the repo.
 $taskWorkDir=$taskFixture
 if($Repo){
