@@ -17,7 +17,13 @@ Observed on the user's Windows host during this build. No credential files were 
 
 The application checks actual native Codex account type, forced ChatGPT/OpenAI provider, disabled integration flags, notification hooks, returned fixture/sandbox/user-review settings and empty thread MCP inventory before starting inference. Failed checks stop the task. The native smoke is a separate bounded inference command; its result must be recorded after actually running it.
 
-Adapter verification passed locally: TypeScript build; seven integration tests using real MCP stdio plus a fake Codex protocol process; ten focused safety regressions. These are simulated provider tests, not a native phone success claim.
+### Native Codex smoke — 2026-10-18
+
+Codex version: `codex-cli 0.162.0-alpha.17.2` (`codex --version`). Result: **inconclusive** because the supplied smoke output was a placeholder rather than a run result:
+
+> `<<<PASTE SMOKE OUTPUT HERE>>>`
+
+Adapter verification passed locally: TypeScript build and 47 automated tests, including MCP integration tests using fake provider processes and focused safety, repository and store regressions. These tests do not establish native provider inference or phone approval success.
 
 Remaining Phase0/1 evidence: native Codex inference (independent verifier), native Claude lead inference/delegation, real user approval and questions in the iPhone interface, cellular reconnect and completion notification. See phone-results.md; all phone rows remain unverified until a human observes them.
 
