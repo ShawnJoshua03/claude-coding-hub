@@ -25,7 +25,7 @@ Codex version: `codex-cli 0.163.0-alpha.10.2` (bundled with the Codex app; not o
 
 OpenCode 1.19.1 (WinGet `SST.opencode`, real `opencode.exe`), driven through the hub's MCP tools with every approval auto-declined. All pre-inference checks passed and the ACP session started. `google/gemini-2.5-pro` was refused by Gemini ("no longer available to new users"); `google/gemini-3.1-pro-preview` failed on free-tier quota (limit 0). `google/gemini-3-flash-preview` **completed** a read-only summary of the fixture README with zero approval requests. This verifies real inference and result delivery, not human approval: a real `session/request_permission` has still not been observed or answered.
 
-Adapter verification passed locally: TypeScript build and 47 automated tests, including MCP integration tests using fake provider processes and focused safety, repository and store regressions. These tests do not establish native provider inference or phone approval success.
+Adapter verification passed locally: TypeScript build and 50 automated tests, including MCP integration tests using fake provider processes and focused safety, repository and store regressions. These tests do not establish native provider inference or phone approval success.
 
 Remaining Phase0/1 evidence: a passing native Codex inference (blocked by inherited MCP servers, see above), a real OpenCode permission request answered by the human, native Claude lead inference/delegation, real user approval and questions in the iPhone interface, cellular reconnect and completion notification. See phone-results.md; all phone rows remain unverified until a human observes them.
 
