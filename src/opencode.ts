@@ -97,7 +97,7 @@ export class OpenCodeWorker extends BaseTask {
     super(cwd);
     const key = env.GEMINI_API_KEY || env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (!key) throw new Error('OpenCode provider needs GEMINI_API_KEY (or GOOGLE_GENERATIVE_AI_API_KEY) in the hub environment');
-    this.apiKey = key; this.model = env.HUB_OPENCODE_MODEL || 'google/gemini-2.5-pro';
+    this.apiKey = key; this.model = env.HUB_OPENCODE_MODEL || 'google/gemini-3-flash-preview';
     if (!/^google\/[A-Za-z0-9._-]+$/.test(this.model)) throw new Error('HUB_OPENCODE_MODEL must be a google/<model> id');
   }
   protected details() { return { sessionId: this.sessionId, model: this.model }; }
