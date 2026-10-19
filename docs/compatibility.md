@@ -29,11 +29,13 @@ Follow-up (same day): real Codex lists hub-disabled servers with `runtimeStatus:
 
 ### Real OpenCode approval — 2026-10-19
 
-Run through `scripts/start-pilot.ps1 -NoRemote` (terminal, not phone). Prompt: run `node --version`. The hub presented exactly one `session/request_permission` with `rawInput: {"command":"node --version"}`; the human chose allow once; the worker returned `v22.17.0`, matching a manual run. The task then reported `Process tree cleanup unconfirmed; workspace stays locked` although no OpenCode process remained. The same approved run outside Claude Code (immediate and 90 s delayed approval) stopped cleanly with taskkill exit 0, so the cause is not yet known; the error now includes taskkill's output (commit 2792b51). A real decline has not been run yet.
+Run through `scripts/start-pilot.ps1 -NoRemote` (terminal, not phone). Prompt: run `node --version`. The hub presented exactly one `session/request_permission` with `rawInput: {"command":"node --version"}`; the human chose allow once; the worker returned `v22.17.0`, matching a manual run. The task then reported `Process tree cleanup unconfirmed; workspace stays locked` although no OpenCode process remained. The same approved run outside Claude Code (immediate and 90 s delayed approval) stopped cleanly with taskkill exit 0, so the cause is not yet known; the error now includes taskkill's output (commit 2792b51).
+
+Real decline, same setup (task 9830ad63): the form showed the same `node --version` request; the human submitted `decline`; the task ended `denied` with an empty result and no error, and no cleanup error appeared. The hub's event history records `allowed: false`. The earlier cleanup error was therefore seen once, on an approved run only.
 
 Adapter verification passed locally: TypeScript build and 50 automated tests, including MCP integration tests using fake provider processes and focused safety, repository and store regressions. These tests do not establish native provider inference or phone approval success.
 
-Remaining Phase0/1 evidence: a real Codex approval answered by the human, a real OpenCode decline and the cause of the pilot-only cleanup error, native Claude lead inference/delegation, real user approval and questions in the iPhone interface, cellular reconnect and completion notification. See phone-results.md; all phone rows remain unverified until a human observes them.
+Remaining Phase0/1 evidence: a real Codex approval answered by the human, the cause of the one-off cleanup error after an approved OpenCode run, native Claude lead inference/delegation, real user approval and questions in the iPhone interface, cellular reconnect and completion notification. See phone-results.md; all phone rows remain unverified until a human observes them.
 
 Sources used for installed interface mapping:
 
