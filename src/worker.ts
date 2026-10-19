@@ -38,8 +38,10 @@ export class CodexWorker extends BaseTask {
    if (flags.some(k => effective.features?.[k] !== false) || (effective.notify?.length ?? 0) !== 0) throw new Error('Worker integrations/hooks were not disabled');
    const account = await this.request('account/read', { refreshToken: false });
    if (account.account?.type !== 'chatgpt' || effective.model_provider !== 'openai' || effective.forced_login_method !== 'chatgpt') throw new Error('Pilot requires native ChatGPT subscription authentication and OpenAI provider');
+   // Exactly one local environment rooted in the task folder; [] would leave the worker with no shell or file tools.
+   const environments = [{ environmentId: 'local', cwd: this.cwd, runtimeWorkspaceRoots: [this.cwd] }];
    const disabledMcp = Object.fromEntries(Object.keys(effective.mcp_servers ?? {}).map(k => [k,{ enabled: false }]));
-   const thread = await this.request('thread/start', { cwd: this.cwd, runtimeWorkspaceRoots: [this.cwd], approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: THREAD_SANDBOX_MODE, ephemeral: true, environments: [], config: { mcp_servers: disabledMcp, sandbox_workspace_write: { writable_roots: [this.cwd], network_access: false, exclude_tmpdir_env_var: true, exclude_slash_tmp: true } }, developerInstructions: 'You are a bounded worker for Claude. Work only in the assigned folder. Do not spawn agents, access external accounts, install dependencies or run git commands that change history. Never retry a denied action. Return a concise report with changes and checks.' });
+   const thread = await this.request('thread/start', { cwd: this.cwd, runtimeWorkspaceRoots: [this.cwd], approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: THREAD_SANDBOX_MODE, ephemeral: true, environments, config: { mcp_servers: disabledMcp, sandbox_workspace_write: { writable_roots: [this.cwd], network_access: false, exclude_tmpdir_env_var: true, exclude_slash_tmp: true } }, developerInstructions: 'You are a bounded worker for Claude. Work only in the assigned folder. Do not spawn agents, access external accounts, install dependencies or run git commands that change history. Never retry a denied action. Return a concise report with changes and checks.' });
    this.threadId = thread.thread.id;
    if (thread.approvalsReviewer !== 'user' || thread.approvalPolicy !== 'on-request' || realpathSync(thread.cwd) !== this.cwd || thread.sandbox?.type !== 'workspaceWrite' || thread.sandbox.networkAccess !== false || (thread.sandbox.writableRoots ?? []).some((p: string) => realpathSync(p) !== this.cwd)) throw new Error('Provider did not retain the required human permissions or workspace sandbox');
    // Codex still lists servers it was told to disable; accept only those, and only if they never started and expose nothing.
@@ -48,7 +50,7 @@ export class CodexWorker extends BaseTask {
    if (!Array.isArray(inventory.data) || inventory.nextCursor || !inventory.data.every(inert)) throw new Error('Worker inherited MCP integrations; pilot stopped before inference');
    if (terminal.has(this.state)) return;
    this.state = 'running';
-   const turn = await this.request('turn/start', { threadId: this.threadId, cwd: this.cwd, runtimeWorkspaceRoots: [this.cwd], input: [{ type: 'text', text: prompt, text_elements: [] }], approvalPolicy: 'on-request', approvalsReviewer: 'user', environments: [], sandboxPolicy: { type: 'workspaceWrite', writableRoots: [this.cwd], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true } });
+   const turn = await this.request('turn/start', { threadId: this.threadId, cwd: this.cwd, runtimeWorkspaceRoots: [this.cwd], input: [{ type: 'text', text: prompt, text_elements: [] }], approvalPolicy: 'on-request', approvalsReviewer: 'user', environments, sandboxPolicy: { type: 'workspaceWrite', writableRoots: [this.cwd], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true } });
    this.turnId = turn.turn.id; for (const event of this.early.splice(0)) this.receive(event); this.changed();
   } catch(e) { if (!terminal.has(this.state)) this.fail(e); }
  }

@@ -8,6 +8,8 @@ const mcp = process.argv.find(a => a.startsWith('mcp='))?.slice(4) ?? '';
 const configMcp = mcp ? {'user-mem':{command:'node',args:['mem.js'],enabled:true}} : {};
 const entry = (name, live) => ({name,runtimeStatus:live?'connected':'disabled',pluginId:null,httpOrigin:null,serverInfo:live?{name}:null,serverCapabilities:live?{tools:{}}:null,tools:live?{read:{name:'read'}}:{},toolsError:null,resources:[],resourceTemplates:[],authStatus:null});
 const inventory = () => [...(mcp ? [entry('user-mem', mcp === 'ignored' || threadMcp['user-mem']?.enabled !== false)] : []), ...(mcp === 'extra' ? [entry('plugin-repl', true)] : [])];
+// Real Codex: [] means no shell or file tools; the worker must get exactly one local environment in its own folder.
+const checkEnvironments = p => { const e = p.environments; if(!Array.isArray(e) || e.length !== 1 || e[0].environmentId !== 'local' || e[0].cwd !== process.cwd() || JSON.stringify(e[0].runtimeWorkspaceRoots) !== JSON.stringify([process.cwd()])) throw Error('Worker environment must be exactly the local task folder'); };
 const finish = text => { send({method:'item/completed',params:{threadId:thread,turnId:turn,item:{type:'agentMessage',text}}}); send({method:'turn/completed',params:{threadId:thread,turn:{id:turn,status:'completed'}}}); };
 createInterface({input:process.stdin}).on('line', line => {
  const m = JSON.parse(line);
@@ -20,11 +22,13 @@ createInterface({input:process.stdin}).on('line', line => {
   if(m.params.sandbox !== 'workspace-write') throw Error('Invalid thread SandboxMode: expected workspace-write');
   if(m.params.approvalsReviewer !== 'user' || m.params.approvalPolicy !== 'on-request') throw Error('Missing human permissions');
   threadMcp = m.params.config?.mcp_servers ?? {};
+  checkEnvironments(m.params);
   send({id:m.id,result:{thread:{id:thread},approvalsReviewer:'user',approvalPolicy:'on-request',cwd:process.cwd(),sandbox:{type:'workspaceWrite',networkAccess:false}}});
  }
  if(m.method === 'turn/start') {
   if(m.params.sandboxPolicy.type !== 'workspaceWrite') throw Error('Invalid turn SandboxPolicy discriminant');
   if(m.params.sandboxPolicy.networkAccess !== false) throw Error('Network enabled');
+  checkEnvironments(m.params);
   mode=m.params.input[0].text;
   send({id:m.id,result:{turn:{id:turn}}});
   setTimeout(()=>{
