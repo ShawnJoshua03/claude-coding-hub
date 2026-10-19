@@ -33,9 +33,13 @@ Run through `scripts/start-pilot.ps1 -NoRemote` (terminal, not phone). Prompt: r
 
 Real decline, same setup (task 9830ad63): the form showed the same `node --version` request; the human submitted `decline`; the task ended `denied` with an empty result and no error, and no cleanup error appeared. The hub's event history records `allowed: false`. The earlier cleanup error was therefore seen once, on an approved run only.
 
+### Real Codex approval — 2026-10-19
+
+The hub runs Codex with `on-request` approvals and a workspace-write sandbox without network. A harmless in-sandbox command (`node --version`, task f92c4352) therefore completed with no approval, which is expected. Prompt: `curl -I https://example.com`. Codex asked to run curl outside the network-restricted sandbox (`item/commandExecution/requestApproval`). Real decline (task 963a307c): the human submitted decline; the task ended `denied`, no error, process stopped. Real allow (task 0a4aadb5): the human allowed; the task completed and reported `HTTP/1.1 200 OK`. Both decisions are recorded in the hub event history (`allowed` false/true).
+
 Adapter verification passed locally: TypeScript build and 50 automated tests, including MCP integration tests using fake provider processes and focused safety, repository and store regressions. These tests do not establish native provider inference or phone approval success.
 
-Remaining Phase0/1 evidence: a real Codex approval answered by the human, the cause of the one-off cleanup error after an approved OpenCode run, native Claude lead inference/delegation, real user approval and questions in the iPhone interface, cellular reconnect and completion notification. See phone-results.md; all phone rows remain unverified until a human observes them.
+Remaining Phase0/1 evidence: the cause of the one-off cleanup error after an approved OpenCode run, native Claude lead inference/delegation, real user approval and questions in the iPhone interface, cellular reconnect and completion notification. See phone-results.md; all phone rows remain unverified until a human observes them.
 
 Sources used for installed interface mapping:
 
