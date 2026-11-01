@@ -1,0 +1,23 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    # The hub's process-tree cleanup and several tests are Windows-first (taskkill), so CI runs there.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      # The demo declines every approval when stdin is empty, so this also checks it still runs.
+      - run: node scripts/demo.mjs < NUL

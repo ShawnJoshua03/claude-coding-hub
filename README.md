@@ -1,74 +1,92 @@
-# Claude coding hub pilot
+# claude-coding-hub
 
-This is the first feasibility build: native Claude Code is the lead, and one Codex worker runs through a local MCP connection. The iPhone conversation and its permission forms still require an actual phone test. There is no public server, custom phone interface, paid API setup or global agent-settings change.
+**Let Claude Code hand work to other coding agents, without letting any of them act on their own.**
 
-## Run locally
+A local [MCP](https://modelcontextprotocol.io) server. Claude Code is the lead engineer; Codex, Gemini CLI, Grok and OpenCode models are bounded workers. Each worker gets its own git worktree, a filtered environment and a hub-owned home. Every risky action it asks for becomes **one human decision, on the exact request**, or an error. The lead model cannot approve anything.
 
-Prerequisites already detected on this host: Node 22.17.0, npm 10.9.2, Claude Code 2.1.302 (native Claude Pro sign-in), Codex 0.162.0-alpha.17.2 (ChatGPT sign-in). Installed project dependencies are locked in package-lock.json. Generated installed Codex types are in protocol/.
-
-```powershell
-cd C:\Users\shawn\projects\claude-coding-hub
-npm.cmd run build
-npm.cmd test
-# This next command uses a bounded real native Codex inference, not a fake worker:
-npm.cmd run smoke
-# Start the interactive Claude lead and native Remote Control:
-.\scripts\start-pilot.ps1
+```mermaid
+flowchart LR
+  H([You]) <-->|approval forms| C[Claude Code<br/>lead]
+  C <-->|MCP| S[claude-coding-hub]
+  S --> W1[Codex]
+  S --> W2[Gemini CLI]
+  S --> W3[Grok]
+  S --> W4[OpenCode<br/>Gemini / OpenRouter]
+  S -.-> G[(git worktree<br/>per task)]
 ```
 
-The launch script creates only .local/mcp.json in this project and starts Claude in fixtures/pilot. Review and accept native trust/Remote Control prompts yourself. It does not approve tools, change global settings or bypass permissions. In Claude use /mcp to confirm coding_hub is connected. Open the native Remote Control link/QR in the signed-in Claude iPhone app; never publish that pairing link.
+## Try it in 30 seconds (no accounts)
 
-## Repo mode: real projects, parallel workers
+```powershell
+npm ci
+npm run build
+npm run demo
+```
+
+A simulated worker runs through the real hub and **you** answer its approval forms in the terminal. The second scenario is the interesting one: the worker asks to run a shell command described only in its own words, and the hub refuses it before you are ever asked. See [why](docs/threat-model.md#finding-acp-permission-prompts-are-not-a-uniform-trust-boundary).
+
+## What makes it different
+
+- **The human decides, not the model.** There is no `approve` tool. Approvals are MCP form elicitations answered in the client's UI, so a prompt-injected lead has nothing to call.
+- **Deny stops the task.** A refusal ends the whole run so the worker cannot rephrase its way past it.
+- **Show the real action or show nothing.** A permission prompt is forwarded only if it carries the exact command or diff. Gemini CLI's does not for shell commands (its title can be a model-written description), so those are refused. [Details](docs/threat-model.md).
+- **The hub's own git is attack-resistant.** A worker can rewrite `.git/hooks` or its `.git` pointer; the hub pins the gitdir it recorded before the worker started and disables hooks. Plain git is exploited by the same tests.
+- **Fails closed on drift.** Each adapter reads back the provider's effective permissions, MCP servers and approval mode, and stops before inference if they differ from what it asked for.
+- **Auditable.** Every request, decision and state change is stored in SQLite and survives restarts (`get_task_history`).
+
+## Workers
+
+| `provider` | Agent | Verified against the real CLI |
+|---|---|---|
+| `codex` | Codex | Real run, real approve and decline |
+| `opencode` | OpenCode + Gemini | Real run, real approve and decline |
+| `gemini` | Gemini CLI (edits only) | Handshake and isolated start only |
+| `openrouter` | OpenCode + OpenRouter | Simulated agent only |
+| `grok` | Grok Build | Handshake only |
+
+Setup, credentials and per-worker notes: [docs/providers.md](docs/providers.md).
+
+## Use it for real
+
+Prerequisites: Windows, Node 22.13+, [Claude Code](https://claude.com/claude-code), and at least one worker CLI signed in.
+
+```powershell
+npm.cmd run build
+npm.cmd test                       # 65 tests, about 90 seconds
+npm.cmd run smoke                  # one bounded real Codex run
+.\scripts\start-pilot.ps1          # Claude lead + the hub, in the disposable fixture
+```
+
+The launcher writes only `.local/mcp.json`, starts Claude in `fixtures/pilot`, and changes no global settings. Use `/mcp` in Claude to confirm `coding_hub` is connected.
+
+### On a real repository, in parallel
 
 ```powershell
 .\scripts\start-pilot.ps1 -Repo C:\path\to\your\repo -MaxWorkers 3
 ```
 
-The lead runs in your repo. Each `start_worker` creates a git worktree under `.local\worktrees` on a new `hub/<id>` branch off the repo's current HEAD, so workers never touch your checkout or each other. Up to `MaxWorkers` run at once. Flow: `start_worker` → `wait_for_worker` → `get_worker_diff` → `commit_worker_changes` (commits to the worker's branch only) → you or Claude merge with normal permissions → `remove_worker_workspace`.
+Each `start_worker` creates a worktree on a new `hub/<id>` branch, so workers never touch your checkout or each other. The flow is `start_worker → wait_for_worker → get_worker_diff → commit_worker_changes`, then you merge. The hub only ever commits to the worker's own branch.
 
-The hub runs git outside the sandbox on a folder the worker could edit, so host-side git always uses the gitdir recorded before the worker started (never the worktree's `.git` pointer) and disables hooks, fsmonitor and external diff drivers. `tests/repo.test.mjs` covers a worker rewriting a repo hook and a worker redirecting `.git` to a gitdir it planted; both attacks succeed against plain git. Remaining trust: clean/smudge filters you have configured yourself (such as Git LFS) still run on worker-written files that select them. Repos that track symlinks are refused.
+## Status
 
-Tasks and decisions are stored in `.local\hub.sqlite`. `list_workers` and `get_task_history` survive restarts; a task that was active when the hub stopped is reported `interrupted`, and its worktree can still be diffed, committed or removed.
+This is a feasibility pilot, not a product. Plainly:
 
-## OpenCode provider (Gemini API key) — UNVERIFIED for real inference and approval
+- **Phone approval does not work.** Claude Remote Control paired with an iPhone, but MCP approval forms never rendered there. Approvals happen in the desktop or terminal client. ([results](docs/phone-results.md), [checklist](docs/phone-testing.md))
+- **Three workers are unverified against their real CLIs**: `gemini`, `openrouter` and `grok` pass tests against simulated agents only. The real Gemini key on the development machine was rejected by Google, and Grok has no non-interactive login.
+- **OpenCode, Gemini and Grok have no OS sandbox.** Once you approve an action it runs as you. Only Codex runs in a sandbox. See [residual risk](docs/threat-model.md#residual-risk-honest-list).
+- **Symlink refusal has no dedicated test.**
+- **Windows-first.** Process cleanup uses `taskkill`; the tests are not run on other platforms.
+- **Pinned to today's CLIs.** Codex 0.163 alpha, OpenCode 1.19, Gemini CLI 0.65, Grok 1.0.70. Checks fail closed on drift, but expect to re-verify after upgrades.
+- **Local models (Ollama) are not supported**, deliberately. [Why](docs/providers.md#local-models-ollama-not-supported-on-purpose).
 
-`start_worker` with `provider: "opencode"` runs `src/opencode.ts`, which drives `opencode acp` (Agent Client Protocol over stdio). Local, keyless checks against the WinGet `opencode.exe` version 1.19.1 confirmed the CLI and configuration behavior below. No real inference or human approval has been completed. Do not rely on this provider until a human has tested a real permission request through the native form.
+## Documentation
 
-- Key: set `GEMINI_API_KEY` (or `GOOGLE_GENERATIVE_AI_API_KEY`) in the environment that launches the hub. The worker gets it only as `GOOGLE_GENERATIVE_AI_API_KEY`, plus the shared allowlist minus `CODEX_HOME`. Optional: `HUB_OPENCODE_MODEL` (must be `google/...`, default `google/gemini-3-flash-preview`), `HUB_OPENCODE_COMMAND` (on Windows point it at the real `opencode.exe`; `.cmd` shims are not launched through a shell). Pro models need a paid Gemini plan (free-tier quota is 0), and gemini-2.5-pro is closed to new users.
-- OpenCode has no OS sandbox. The resolved config must retain `ask` for bash and edit and `deny` for web tools, subagents, skills and external directories. The adapter refuses permission requests without reviewable input and only selects the provider's `allow_once` option. Whether real OpenCode supplies an exact command or edit for every action still needs a human test. An approved command runs unsandboxed as you and can see the Gemini key.
-- OpenCode's XDG config/data/state/cache directories and its Windows home paths point at a fresh temp folder per task. A local probe showed that redirecting XDG alone still loaded `~/.opencode`; redirecting the home paths closes that observed path. Both CLI phases use `--pure`. Before inference the hub runs `opencode debug config` and stops unless required permissions, the Google model/provider, empty MCP/plugin and custom configuration, and disabled LSP/formatters were retained. A task folder (up to its git root) containing `opencode.json`, `opencode.jsonc` or `.opencode/` is refused.
-- Confirmed locally without inference: `acp` and `debug config` exist; debug output is parseable JSON; inline config retained the Google model over a global model; all nine configured permission values appeared in resolved config; XDG paths were used on Windows; `OPENCODE_DISABLE_PROJECT_CONFIG` excluded a project config. ACP `initialize` returned protocol version 1, and `session/new` returned a session ID but **omitted** `models.currentModelId`. The adapter therefore relies on its resolved-config model check when that field is absent.
-- Still to check with a real permission request: the `session/request_permission` tool input and option shapes, whether every bash command and edit actually requests approval, the effects of the other `OPENCODE_DISABLE_*` flags and `--pure` on all integrations, managed configuration, and whether startup downloads the Google SDK. Worker questions are unsupported by this adapter.
+- [Threat model](docs/threat-model.md): attacks, defences, the test for each, and what remains
+- [Architecture](docs/architecture.md): lifecycle, one decision end to end, how to add a worker
+- [Workers](docs/providers.md): setup and what is verified
+- [Limitations](docs/limitations.md), [compatibility record](docs/compatibility.md), [phone results](docs/phone-results.md), [phone checklist](docs/phone-testing.md)
+- [AGENTS.md](AGENTS.md): rules for coding agents working on this repo (which files are off limits and why)
 
-## What to test from the iPhone
+## License
 
-1. Ask Claude: `Call coding_hub test_phone_form. This is only a synthetic rendering check; do not run a worker.` Choose decline, then repeat and choose allow-once, typing phone-test. No command executes in either synthetic test.
-2. Ask: `Use start_worker to ask Codex to summarize this fixture README without changing files. Use wait_for_worker to bring its result back here.` Confirm useful output in this same conversation.
-3. Ask Claude to implement a small meaningful component itself: `Design and implement a dependency-free task-status formatter in this fixture. You own its API, implementation and checks. Then give Codex a bounded independent review task through coding_hub, explain why that review helps, assess its findings, and make any fixes yourself.` This proves Claude does substantive engineering while Codex contributes a distinct task.
-4. Test a REAL Codex approval separately: ask Claude to delegate one explicitly described harmless command that Codex requests permission for, then call wait_for_worker. The form must say REAL CODEX APPROVAL and show the exact provider command, directory and requested access. Do not claim the flow passed if Codex never requests permission. Choose decline first; task must stop. For the next fresh task approve once; verify only that exact action. Do not approve arbitrary extra access to force a demonstration.
-5. Test a real worker question when available. The native question form must be answered by you, not Claude tool arguments. Synthetic UI tests alone do not prove worker question delivery.
-6. Start a bounded task, lock/disconnect the phone, reconnect and inspect it. Start another, cancel it while a decision is pending, then ensure a late response cannot restart the task. Test a wait longer than two minutes to evaluate Claude's native background completion notification; until observed, automatic wake-up remains unverified.
-
-Record each pass/fail with phone model/app version, date, exact test and observed behavior in docs/phone-results.md. Terminal-only completion does not count as phone approval success. If a required form cannot be shown or a completion cannot resume the lead, document the exact case before considering another interface.
-
-## Boundaries and honest limitations
-
-- In fixture mode one worker at a time edits the dedicated fixture; in repo mode each worker gets its own worktree. Workers cannot select a different directory through the MCP tools. Local environment configuration is trusted host setup. Filesystem links/junctions inside the fixture are refused during startup. A working folder is not OS isolation; native Codex sandbox enforcement still matters.
-- Provider startup forces OpenAI/ChatGPT login and verifies the returned account type. It omits API keys from the worker environment and disables native plugins, hooks, notification commands, browser/computer tools, apps and additional agents. It discovers and disables inherited MCP servers and refuses inference unless the thread inventory is empty and required sandbox/user-approval settings were retained. Native Codex still uses its own supported account storage; no credentials are read by our application.
-- Approvals and questions use actual MCP form elicitation. No model-facing approval/answer endpoint exists. Native client hooks or an untrusted client could still auto-answer forms; do not enable auto-answer hooks for this pilot. The app cannot cryptographically prove a client response came from a human.
-- Command approvals require a reviewable command/directory and available accept-once decision. Network-policy-only requests are unsupported. File approvals require a matching captured exact patch; persistent grantRoot requests are refused. Other request kinds fail closed. Denial stops the whole task to avoid automatic rephrased retries.
-- Tasks continue between individual MCP calls while the MCP process lives. Task history is durable, but live workers are not: exiting Claude, terminating the MCP server or host sleep stops them, and they are reported interrupted on restart rather than resumed. On Windows a worker orphaned by a hub crash may keep running until you end it. There is a 10-minute worker deadline and 20-task session limit.
-- A completed provider turn is a worker report, not proof that project checks passed. Claude owns integration and verification.
-- Tests use a fake Codex protocol process and real MCP transport. They verify adapter behavior but cannot prove native sandbox enforcement, subscription entitlement or iPhone rendering. scripts/smoke.mjs uses real Codex for read-only inference and declines unexpected approval requests; actual human accept-once must be tested on the phone.
-
-See [phone test results](docs/phone-results.md) and [Claude's lead responsibilities](fixtures/pilot/CLAUDE.md).
-
-Regenerate installed schemas when upgrading Codex: codex app-server generate-ts --out protocol --experimental. Generated schemas are local verification inputs and ignored by Git.
-
-### Exact harmless real-approval probe
-
-Send this to the Claude lead after the synthetic form and read-only worker tests:
-
-> Ask Codex to request explicit human permission (`sandbox_permissions=require_escalated`, with no prefix_rule or remembered policy amendment) before running only PowerShell `Write-Output 'coding-hub-approval-test'` in the disposable fixture, solely to test delegated consent. Call wait_for_worker so I can answer the real native form. If Codex does not emit a real permission request, report the test as inconclusive; do not substitute a simulated approval. After a decline, stop. On a fresh task after approve-once, check the output happened exactly once.
-
-The exact provider request must appear in the human form. This request is deliberately small and produces console text only; it does not install packages, access the network, write a file or grant a remembered command policy.
+[MIT](LICENSE)
