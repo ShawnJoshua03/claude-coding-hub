@@ -21,6 +21,11 @@ rl.on('close', () => { closed = true; for (const w of waiting.splice(0)) w(''); 
 const ask = q => { process.stdout.write(q); return new Promise(resolve => { if (lines.length) resolve(lines.shift()); else if (closed) resolve(''); else waiting.push(resolve); }); };
 const bold = s => `\x1b[1m${s}\x1b[0m`, dim = s => `\x1b[2m${s}\x1b[0m`;
 let formsShown = 0;
+// The real form also lists the provider's option ids; the demo omits them so the exact action fits on screen.
+const compact = message => {
+  const m = message.match(/^(.*?) Exact provider request:\n([\s\S]*?)\nApprove once only/);
+  try { return `${m[1]}\nExact provider request (option ids omitted):\n${JSON.stringify(JSON.parse(m[2]).toolCall, null, 2)}`; } catch { return message; }
+};
 
 const transport = new StdioClientTransport({
   command: process.execPath, args: [join(root, 'dist/server.js')], cwd: root, stderr: 'pipe',
@@ -29,7 +34,7 @@ const transport = new StdioClientTransport({
 const client = new Client({ name: 'terminal-demo', version: '1' }, { capabilities: { elicitation: { form: {} } } });
 client.setRequestHandler(ElicitRequestSchema, async req => {
   formsShown++;
-  console.log(`\n${bold('--- APPROVAL FORM (what the human sees) ---')}\n${req.params.message}\n`);
+  console.log(`\n${bold('--- APPROVAL FORM (what the human sees) ---')}\n${compact(req.params.message)}\n`);
   const answer = (await ask(bold('Allow this exact request once? [y/N] '))).trim().toLowerCase();
   const allow = answer === 'y' || answer === 'yes';
   console.log(dim(allow ? 'You allowed it once.' : 'You declined. The whole task stops.'));

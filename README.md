@@ -23,6 +23,10 @@ npm run build
 npm run demo
 ```
 
+![Terminal demo: the approval form shows the exact request, then the hub refuses a disguised shell command](docs/demo.gif)
+
+*A replay of real `npm run demo` output.*
+
 A simulated worker runs through the real hub and **you** answer its approval forms in the terminal. The second scenario is the interesting one: the worker asks to run a shell command described only in its own words, and the hub refuses it before you are ever asked. See [why](docs/threat-model.md#finding-acp-permission-prompts-are-not-a-uniform-trust-boundary).
 
 ## What makes it different
