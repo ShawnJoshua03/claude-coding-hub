@@ -11,11 +11,17 @@ if(-not $taskCodex){$taskCodex=(Get-ChildItem "$env:LOCALAPPDATA\OpenAI\Codex\bi
 if(-not $taskCodex){throw 'codex not found on PATH or in the Codex app folder.'}
 $taskOpenCode=(Get-Command opencode -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
 if(-not $taskOpenCode){$taskOpenCode=(Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\SST.opencode_*\opencode.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName}
+# Gemini CLI is an npm .cmd shim and the hub does not launch shims through a shell, so run its real entry point with node.
+$taskGemini=Join-Path $env:APPDATA 'npm
+ode_modules@googlegemini-cliundlegemini.js'
+$taskGrok=(Get-Command grok -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
 $taskLocal=Join-Path $taskHubRoot '.local'
 New-Item -ItemType Directory -Path $taskLocal -Force | Out-Null
 $taskConfig=Join-Path $taskLocal 'mcp.json'
 $taskEnv=@{HUB_FIXTURE_ROOT=$taskFixture;HUB_CODEX_COMMAND=$taskCodex;HUB_CODEX_PREFIX_JSON='[]';HUB_DB_PATH=(Join-Path $taskLocal 'hub.sqlite')}
 if($taskOpenCode){$taskEnv.HUB_OPENCODE_COMMAND=$taskOpenCode; $taskEnv.HUB_OPENCODE_PREFIX_JSON='[]'}
+if(Test-Path -LiteralPath $taskGemini){$taskEnv.HUB_GEMINI_COMMAND=$taskNode; $taskEnv.HUB_GEMINI_PREFIX_JSON=(ConvertTo-Json -InputObject @($taskGemini) -Compress)}
+if($taskGrok){$taskEnv.HUB_GROK_COMMAND=$taskGrok; $taskEnv.HUB_GROK_PREFIX_JSON='[]'}
 # Repo mode: each worker gets its own worktree under .local\worktrees and a hub/* branch; the lead runs in the repo.
 $taskWorkDir=$taskFixture
 if($Repo){

@@ -23,10 +23,17 @@ export const OPENCODE_PERMISSIONS = { edit: 'ask', bash: 'ask', webfetch: 'deny'
 export const OPENCODE_OPTIONAL_PERMISSIONS = { websearch: 'deny', codesearch: 'deny', task: 'deny', skill: 'deny', doom_loop: 'ask' } as const;
 const PROJECT_CONFIG = ['opencode.json', 'opencode.jsonc', '.opencode'];
 
-export function openCodeConfig(model: string) {
+// Which hosted model service OpenCode talks to. Google is the verified default; OpenRouter reuses every
+// check below with a different provider id and key. Providers that need a custom provider block
+// (a local Ollama server, say) are deliberately not profiles: checkOpenCodeConfig forbids provider overrides.
+export type OpenCodeProfile = { id: string; provider: string; label: string; keyEnv: string[]; childKeyEnv: string; modelEnv: string; defaultModel: string; modelPattern: RegExp };
+export const GOOGLE_PROFILE: OpenCodeProfile = { id: 'google', provider: 'opencode', label: 'Gemini', keyEnv: ['GEMINI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'], childKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY', modelEnv: 'HUB_OPENCODE_MODEL', defaultModel: 'google/gemini-3-flash-preview', modelPattern: /^google\/[A-Za-z0-9._-]+$/ };
+export const OPENROUTER_PROFILE: OpenCodeProfile = { id: 'openrouter', provider: 'openrouter', label: 'OpenRouter', keyEnv: ['OPENROUTER_API_KEY'], childKeyEnv: 'OPENROUTER_API_KEY', modelEnv: 'HUB_OPENROUTER_MODEL', defaultModel: 'openrouter/qwen/qwen3-coder', modelPattern: /^openrouter\/[A-Za-z0-9._:-]+(\/[A-Za-z0-9._:-]+)+$/ };
+
+export function openCodeConfig(model: string, providerId = 'google') {
   return {
     $schema: 'https://opencode.ai/config.json',
-    model, small_model: model, enabled_providers: ['google'],
+    model, small_model: model, enabled_providers: [providerId],
     autoupdate: false, share: 'disabled', lsp: false, formatter: false,
     mcp: {}, plugin: [], instructions: [],
     permission: { ...OPENCODE_PERMISSIONS, ...OPENCODE_OPTIONAL_PERMISSIONS },
@@ -36,17 +43,17 @@ export function openCodeConfig(model: string) {
 // Built from the shared allowlist, minus CODEX_HOME. OpenCode's config/data/state/cache dirs are
 // redirected to a fresh hub-owned folder so no global config, plugin or stored auth.json is
 // inherited. The only credential added is the Gemini key, taken from the hub's own environment.
-export function openCodeEnvironment(home: string, apiKey: string, model: string): Record<string, string> {
+export function openCodeEnvironment(home: string, apiKey: string, model: string, profile: OpenCodeProfile = GOOGLE_PROFILE): Record<string, string> {
   const { CODEX_HOME: _codex, ...base } = filteredEnvironment();
   return {
     ...base,
     // OpenCode also searches ~/.opencode independently of the XDG directories.
     HOME: home, USERPROFILE: home, APPDATA: join(home, 'Roaming'), LOCALAPPDATA: join(home, 'Local'),
     XDG_CONFIG_HOME: join(home, 'config'), XDG_DATA_HOME: join(home, 'data'), XDG_STATE_HOME: join(home, 'state'), XDG_CACHE_HOME: join(home, 'cache'),
-    OPENCODE_CONFIG_CONTENT: JSON.stringify(openCodeConfig(model)),
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(openCodeConfig(model, profile.id)),
     OPENCODE_DISABLE_AUTOUPDATE: '1', OPENCODE_DISABLE_DEFAULT_PLUGINS: '1', OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
     OPENCODE_DISABLE_CLAUDE_CODE: '1', OPENCODE_DISABLE_MODELS_FETCH: '1', OPENCODE_DISABLE_PROJECT_CONFIG: '1',
-    GOOGLE_GENERATIVE_AI_API_KEY: apiKey,
+    [profile.childKeyEnv]: apiKey,
   };
 }
 
@@ -67,7 +74,7 @@ function permissionValue(v: unknown) {
   return undefined;
 }
 // Fails closed: anything not positively matching the hub's settings stops the task before inference.
-export function checkOpenCodeConfig(c: any, model: string) {
+export function checkOpenCodeConfig(c: any, model: string, providerId = 'google') {
   const problems: string[] = [];
   const perm = c?.permission && typeof c.permission === 'object' ? c.permission : {};
   for (const [k, want] of Object.entries(OPENCODE_PERMISSIONS)) if (permissionValue(perm[k]) !== want) problems.push(`permission.${k} must be ${want}`);
@@ -82,23 +89,24 @@ export function checkOpenCodeConfig(c: any, model: string) {
   if (c?.default_agent !== undefined || c?.skills !== undefined || c?.experimental !== undefined) problems.push('extra agent or tool configuration');
   if (c?.model !== model) problems.push('model not retained');
   if (c?.small_model !== model) problems.push('small model not retained');
-  if (JSON.stringify(c?.enabled_providers) !== '["google"]') problems.push('providers other than google enabled');
+  if (JSON.stringify(c?.enabled_providers) !== JSON.stringify([providerId])) problems.push(`providers other than ${providerId} enabled`);
   if (c?.lsp !== false || c?.formatter !== false) problems.push('LSP servers or formatters enabled');
   if (c?.share !== 'disabled' || c?.autoupdate !== false) problems.push('sharing or autoupdate enabled');
   if (problems.length) throw new Error(`OpenCode did not retain the required human permissions/isolation: ${[...new Set(problems)].join('; ')}`);
 }
 
 export class OpenCodeWorker extends BaseTask {
-  readonly provider = 'opencode'; sessionId = '';
+  readonly provider: string; sessionId = '';
   private seq = 0; private home = '';
   private requests = new Map<number, { resolve: (x: any) => void; reject: (e: Error) => void; timer?: NodeJS.Timeout }>();
   private readonly apiKey: string; readonly model: string;
-  constructor(cwd: string, readonly command = 'opencode', readonly prefix: string[] = [], env: Record<string, string | undefined> = process.env) {
+  constructor(cwd: string, readonly command = 'opencode', readonly prefix: string[] = [], env: Record<string, string | undefined> = process.env, readonly profile: OpenCodeProfile = GOOGLE_PROFILE) {
     super(cwd);
-    const key = env.GEMINI_API_KEY || env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!key) throw new Error('OpenCode provider needs GEMINI_API_KEY (or GOOGLE_GENERATIVE_AI_API_KEY) in the hub environment');
-    this.apiKey = key; this.model = env.HUB_OPENCODE_MODEL || 'google/gemini-3-flash-preview';
-    if (!/^google\/[A-Za-z0-9._-]+$/.test(this.model)) throw new Error('HUB_OPENCODE_MODEL must be a google/<model> id');
+    this.provider = profile.provider;
+    const key = profile.keyEnv.map(k => env[k]).find(Boolean);
+    if (!key) throw new Error(`${profile.provider} provider needs ${profile.keyEnv.join(' or ')} in the hub environment`);
+    this.apiKey = key; this.model = env[profile.modelEnv] || profile.defaultModel;
+    if (!profile.modelPattern.test(this.model)) throw new Error(`${profile.modelEnv} must be a ${profile.id}/<model> id`);
   }
   protected details() { return { sessionId: this.sessionId, model: this.model }; }
   private write(x: Envelope) { if (this.child && !this.child.stdin.destroyed && !this.child.stdin.writableEnded) this.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...x }) + '\n'); }
@@ -136,8 +144,8 @@ export class OpenCodeWorker extends BaseTask {
       if (found.length) throw new Error(`Project OpenCode config can load plugins or override permissions; remove it first: ${found.map(f => relative(this.cwd, f) || f).join(', ')}`);
       this.home = mkdtempSync(join(tmpdir(), 'hub-opencode-'));
       const r = relative(this.cwd, this.home); if (r === '' || (!r.startsWith('..') && !isAbsolute(r))) throw new Error('OpenCode home must be outside the task folder');
-      const env = openCodeEnvironment(this.home, this.apiKey, this.model);
-      checkOpenCodeConfig(await this.resolvedConfig(env), this.model);
+      const env = openCodeEnvironment(this.home, this.apiKey, this.model, this.profile);
+      checkOpenCodeConfig(await this.resolvedConfig(env), this.model, this.profile.id);
       if (terminal.has(this.state)) return;
       const child = this.spawnChild(['acp', '--pure'], env);
       child.on('error', e => { this.stopped = true; this.fail(e); });
@@ -149,7 +157,7 @@ export class OpenCodeWorker extends BaseTask {
       const session = await this.request('session/new', { cwd: this.cwd, mcpServers: [] });
       if (typeof session?.sessionId !== 'string' || !session.sessionId) throw new Error('OpenCode did not return a session');
       const current = session.models?.currentModelId;
-      if (current !== undefined && !String(current).startsWith('google/')) throw new Error('OpenCode session is not using the Gemini provider');
+      if (current !== undefined && !String(current).startsWith(`${this.profile.id}/`)) throw new Error(`OpenCode session is not using the ${this.profile.label} provider`);
       this.sessionId = session.sessionId;
       if (terminal.has(this.state)) return;
       this.state = 'running'; this.changed();
