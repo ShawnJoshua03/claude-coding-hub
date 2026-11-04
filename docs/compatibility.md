@@ -49,3 +49,12 @@ Sources used for installed interface mapping:
 - https://code.claude.com/docs/en/remote-control
 
 Generated schemas and CLI help are authoritative for this installed alpha build. The prototype does not assume arbitrary future Codex versions remain compatible.
+
+### Gemini CLI and Grok probes — 2026-11-01
+
+Handshake-level checks only. No real permission request was observed for either.
+
+- **Gemini CLI 0.65.0** (`gemini --acp`): `initialize` returns protocol 1 and auth methods including `gemini-api-key`. `authenticate` accepts the key in `_meta['api-key']`. With `GEMINI_CLI_HOME` and `GEMINI_CLI_SYSTEM_SETTINGS_PATH` redirected into a fresh folder, `session/new` succeeds and reports `currentModeId: "default"`. The first prompt then failed with Google 401 `API key not valid`: the key stored on the development machine (53 characters, `AQ.` prefix) is also rejected by the Gemini models endpoint, so no inference was run. From the CLI source: permission requests carry `title`, `content`, `locations` and `kind` but **no `rawInput`**, and a long shell command's title is replaced by the model-written description.
+- **Grok 1.0.70** (`grok agent stdio`): speaks ACP. Under the real home the agent loads this machine's MCP servers, and `grok inspect` shows it importing 232 permission rules from `~/.claude/settings.json` plus 220 skills. Under an empty home it loads no MCP servers and offers a single auth method, a browser login (`grok.com`); `session/new` returns `Authentication required`. This is why the hub gives Grok its own persistent home and a separate login rather than copying a token.
+- **OpenRouter**: not probed. The adapter reuses the OpenCode profile mechanism and is tested against the simulated OpenCode only.
+- **Ollama**: not installed; not supported (see providers.md).
