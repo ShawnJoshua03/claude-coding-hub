@@ -44,9 +44,9 @@ A simulated worker runs through the real hub and **you** answer its approval for
 |---|---|---|
 | `codex` | Codex | Real run, real approve and decline |
 | `opencode` | OpenCode + Gemini | Real run, real approve and decline |
-| `gemini` | Gemini CLI (edits only) | Handshake and isolated start only |
-| `openrouter` | OpenCode + OpenRouter | Simulated agent only |
-| `grok` | Grok Build | Handshake only |
+| `gemini` (experimental) | Gemini CLI (edits only) | Handshake and isolated start only |
+| `openrouter` (experimental) | OpenCode + OpenRouter | Simulated agent only |
+| `grok` (experimental) | Grok Build | Handshake only |
 
 Setup, credentials and per-worker notes: [docs/providers.md](docs/providers.md).
 
