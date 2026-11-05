@@ -21,3 +21,4 @@ jobs:
       - run: npm test
       # The demo declines every approval when stdin is empty, so this also checks it still runs.
       - run: node scripts/demo.mjs < NUL
+        shell: cmd
