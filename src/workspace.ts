@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, realpathSync as jsRealpath } from 'node:fs';
 import { join, relative, isAbsolute } from 'node:path';
+// .native expands Windows 8.3 short names (RUNNER~1), which git's output never contains; the JS version does not.
+const realpathSync = jsRealpath.native;
 
 export function scanLinks(path: string) {
   if (lstatSync(path).isSymbolicLink()) throw new Error(`Links/junctions are unsupported in worker workspaces: ${path}`);
